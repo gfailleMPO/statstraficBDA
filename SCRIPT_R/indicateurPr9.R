@@ -17,7 +17,7 @@ library(Hmisc)
 
 # le chemin  
 
-allo<-"Y:/AMP_Refuges/Projets/BdA/Donnees/Traffic_maritime/InovJAN2024/livrable-2012-2022/Transits"
+allo<-"Y:/AMP_Refuges/Projets/BdA/Donnees/Traffic_maritime/InovJAN2024/livrable-clean-2024/Transits"
 analyse<-"Y:/AMP_Refuges/Projets/BdA/Donnees/Traffic_maritime/AnalysesRepSciencDec2023/V2_jan2024"
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 ### concatenation  du jeu de données  ### ### ### ### ### ### ### ### ### ### 
@@ -59,10 +59,10 @@ tp <-read_excel("Dates_limites_vitesse_baleineN.xlsx", sheet = 1)
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 
 
-names(IND)[c(1,5:6,11:14)]<-c("Annee","Category_Type","Category_Longueur","Duree_en_jours","Vitesse_moyenne","Vitesse_min","Vitesse_max")
+names(IND)[c(1,5:6,11:14)]<-c("Annee","Category_Type","Category_Longueur","Duree_en_jours","Vitesse_moyenne","Vitesse_min","Vitesse_max") # Attention si l'ordre des variables change
 IND$Category_Type<-gsub("Opération maritimes","Opérations maritimes",IND$Category_Type)#correction du 's'
 IND$Category_Type2<-ifelse(IND$Category_Type== "Marchands" | IND$Category_Type=="Passagers","Commercial",IND$Category_Type) # creation d un nouveau champ 
-cat( "n\ Les Marchands et Passagers sont compris dans Commercial")
+cat( "n\ Les Marchands et Passagers sont compris dans Commercial") # crée une catégorie qui met passaers + marchands dans commercial
 
 IND$UP10<-ifelse(as.numeric(IND$Vitesse_max)>10,"SPEED","SLOW")# pas vite vs trop vite
 IND$Debut<-as.POSIXct(IND$Début,format("%Y-%m-%d %H:%M"),tz = "UTC")
@@ -114,21 +114,22 @@ IND$GROUPYEAR<-paste(IND$Category_Type2,IND$Annee,sep="XX")### code de flemard p
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 ### creation du tableau in out periode et speed up to 10 ## ### ### ### ### ### 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
-IND$N<-1
-test2 <-as.data.frame(tapply(IND$N,list(IND$GROUPYEAR,IND$PERIOD,IND$UP10),sum,na.rm=T))
-test2$sum <-rowSums(test2,na.rm=T)
-test2 <-cbind(test2,str_split_fixed(rownames(test2),"XX",2))
+IND$N<-1 # Génère un efectif 1/ligne
+test2 <-as.data.frame(tapply(IND$N,list(IND$GROUPYEAR,IND$PERIOD,IND$UP10),sum,na.rm=T)) # Création d'une liste style tableau croisé dynamique
+test2$sum <-rowSums(test2,na.rm=T) # Ajoute une variable somme du nombre de passages annuels (in, out, vite pas vite) 
+test2 <-cbind(test2,str_split_fixed(rownames(test2),"XX",2)) # Déconcaténer le facteur de flemard òù il y a xx pour ravoir catégorie + année séparées
 names(test2)[6:7]<-c("Category_Type","Annee")
 test2[is.na(test2)]<-0
-test2$in.prop.speed<-round(c(test2$in.SPEED/c(test2$in.SLOW+test2$in.SPEED))*100,0)
-test2$out.prop.speed<-round(c(test2$out.SPEED/c(test2$out.SLOW+test2$out.SPEED))*100,0)
+test2$in.prop.speed<-round(c(test2$in.SPEED/c(test2$in.SLOW+test2$in.SPEED))*100,0) # proportion en %
+test2$out.prop.speed<-round(c(test2$out.SPEED/c(test2$out.SLOW+test2$out.SPEED))*100,0) # proportion en %
 test2$totup10<-c(test2$in.SPEED+test2$out.SPEED)
-test2<-powerjoin::power_full_join(test2,nombrein, fill = NA)
+test2<-powerjoin::power_full_join(test2,nombrein, fill = NA) # Fait une jointure avec le fichier timeseries (nombrein) nombre de jours dans l'année sous restriction
 test2 <-test2[c("Category_Type","Annee","nombre.in", "sum", "totup10", "in.SLOW","in.SPEED","in.prop.speed","out.SLOW","out.SPEED","out.prop.speed")]
-setwd(analyse)
+setwd(analyse) # On se replace dans le fichier analyse
 test2$in.prop.speed[is.nan(test2$in.prop.speed)]<-0
 test2$out.prop.speed[is.nan(test2$out.prop.speed)]<-0
-test2 <-droplevels(subset(test2,Category_Type%nin%NA))
+# test2 <-droplevels(subset(test2,Category_Type%nin%NA))
+test2 <-droplevels(subset(test2,Category_Type%in%c("AOM",  "Commercial", "Inconnu",  "Opérations maritimes", "Pêches", "Plaisanciers"))) # En attendant de résoudre le problème lié au package Hmisc
 write.csv(test2,"IndicPr9_TAB_Vitesse_up10.csv",row.names=FALSE)
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 ### creation du tableau vitesse moyenne annuelle des vitesses moyennes  ### ### 
@@ -146,78 +147,3 @@ write.csv(test,"IndicPr9_TAB_Vitesse_moy.csv",row.names=FALSE)
 
 teststd <-as.data.frame(tapply(as.numeric(IND$Vitesse_moyenne),list(IND$Annee,IND$Category_Type2),sd,na.rm=T))
 
-
-# # # # #  exploration des kml 
- #allo2= "Y:/AMP_Refuges/Projets/BdA/Donnees/Traffic_maritime/InovJAN2024/livrable-2012-2022/kml"
-# 
-# 
-# kmlfilelist <- list.files(allo2, pattern =".kml$", full.names=TRUE, recursive=FALSE)
-# library(XML)
-# doc0 <- xmlTreeParse(kmlfilelist[2], useInternal = TRUE)
-# rootNode0 <- xmlRoot(doc0)
-# rootName0 <- xmlName(rootNode0)
-# element1Name0 <- names(rootNode0)
-# 
-# nodeNames <- names(rootNode0[1][[1]])
-# # entire rootNode - kml Document level
-# rootNode0[[1]]
-# 
-# # 1st element of rootNode - kml file name
-# rootNode0[[1]][[1]] 
-# 
-# # 2nd element of rootNode - kml Style Map 
-# rootNode0[[1]][[2]] 
-# 
-# # 3rd element of rootNode - Style
-# rootNode0[[1]][[3]]
-# 
-# # 4th element of rootNode - Style
-# rootNode0[[1]][[4]] 
-# 
-# # 5th element of rootNode - kml Folder with data in it.
-# rootNode0[[1]][[5]] 
-# 
-# # 5th element 1st subelement of rootNode - kml Folder name with data in it. 
-# #  What to set readOGR() layer parameter to.
-# rootNode0[[1]][[5]][[1]] 
-# 
-# kmlfoldername <- xmlValue(rootNode0[[1]][[5]][[1]]) # Folder name to set = layer.
-
-### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
-### la suite est a revoir   ### ### 
-### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
-
-
-
-test3<-melt(test)
-names(test3)<-c("Annee","Category_Type","MeanMspeed")
-test3<-droplevels(subset(test3,Category_Type %nin% "Inconnu"))
-ggplot()+geom_line(test3,mapping=aes(x=Annee,y=MeanMspeed,group=Category_Type,color=Category_Type))+ 
-  geom_hline(yintercept=10,col=c("red"),linetype=2)
-
-# ggplot(all, aes(x = Annee, y = pourc10 , fill = Category_Type )) +
-#   geom_bar(data = subset(all, Category_Type == "Opération maritimes"), stat = "identity") +
-#   geom_bar(data = subset(all, Category_Type == "Autres types"), stat = "identity") +
-#   coord_flip()
-# 
-# ggplot(all,aes(Annee,pourc10,fill=Category_Type))+
-#   geom_bar(stat="identity",position="dodge")
-# 
-# test2
-# A <-tapply(test2$MeanMspeed, list(test2$Annee,test2$Category_Type),sum)
-# B <-tapply(all$SPEED , list(all$Annee,all$Category_Type ),sum)
-# 
-# C<-cbind(as.data.frame(A),as.data.frame(c(B[,1]+B[,2])), as.data.frame(B)[,1])
-# 
-# MOY<-as.data.frame(t(colMeans(C)))#ici rajouter [2:$$$] pour faire une moyenne uniquement sur les années souhaitées
-# row.names(MOY)<-"MOY"
-# 
-# ET<-C[1,]
-# for (i in 1:dim(ET)[2]){ET[i]<-sd(C[,i])}
-# row.names(ET)<-"ET"
-# clip<- rbind(C,MOY,ET)
-# clip<-clip[,c(1,2,4)]
-# clip<- cbind(row.names(clip),clip)
-# names(clip)<-c("year",	"Vmoy_Comm_an","Vmoy_OpM_an","tot_pass>10_Comm_an")
-# 
-# write.csv(clip,"IndicPr9_R.csv",row.names = FALSE)
